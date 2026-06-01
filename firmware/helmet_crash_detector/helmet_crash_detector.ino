@@ -551,14 +551,13 @@ void loop() {
     helmWorn = true;
     armed = true;
     addLog("Helmet WORN — detection armed");
-  } else if (!touchHigh && helmWorn) {
+  } else if (!touchHigh && helmWorn && currentMode != FAST) {
     helmWorn = false;
     armed = false;
     confirmWaiting = false;
     addLog("Helmet NOT WORN — detection disabled");
-    if (currentMode == FAST && alertState == ALERT_PENDING) {
-      addLog("Worn lost during FAST — countdown continues");
-    }
+  } else if (!touchHigh && helmWorn && currentMode == FAST) {
+    addLog("Touch open during FAST (tilt) — still worn");
   }
 
   handleButton();

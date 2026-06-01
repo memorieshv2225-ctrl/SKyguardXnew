@@ -1,6 +1,7 @@
 /** Map sensor / countdown data into classifier inputs. */
 
 import { classifyAlert } from "./alertClassifier.js";
+import { deriveHelmetWorn } from "./countdownTracker.js";
 
 export function isMoving(data) {
   const vib = Number(data.vibration ?? 0);
@@ -16,7 +17,7 @@ export function buildClassifierInputsFromTracker(tracker, overrides = {}) {
   const disconnected = !!(
     overrides.helmetDisconnectedMid ?? tracker.helmetDisconnectedMid
   );
-  const helmetWorn = !!tracker.everWorn && !tracker.everNotWorn;
+  const helmetWorn = deriveHelmetWorn(tracker);
   const movementDetectedLast5s =
     tracker.final5sSamples.length > 0
       ? !!tracker.final5sHadMovement

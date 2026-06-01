@@ -34,6 +34,23 @@ let latest = null;
 let lastFetchOk = false;
 let lastFetchAt = null;
 let lastError = null;
+/** Debounce touch flicker when helmet tilts (TTP223 opens briefly). */
+let wornLatch = false;
+let wornOffStreak = 0;
+const WORN_OFF_STREAK = 6;
+
+function applyWornLatch(data) {
+  if (!data) return data;
+  const touchWorn = !!data.worn;
+  if (touchWorn) {
+    wornLatch = true;
+    wornOffStreak = 0;
+  } else if (wornLatch) {
+    wornOffStreak += 1;
+    if (wornOffStreak >= WORN_OFF_STREAK) wornLatch = false;
+  }
+  return { ...data, worn: wornLatch || touchWorn, wornTouchRaw: touchWorn };
+}
 const alertHistory = [];
 const notifyLog = [];
 
@@ -41,7 +58,7 @@ async function pollEsp32() {
   try {
     const res = await fetch(ESP32_URL, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = applyGpsSimulation(await res.json());
+    const data = applyWornLatch(applyGpsSimulation(await res.json()));
     if (isServerCountdownRunning()) recordCountdownSample(data);
     latest = data;
     lastFetchOk = true;

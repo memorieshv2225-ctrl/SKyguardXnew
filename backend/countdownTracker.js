@@ -4,8 +4,27 @@ import { isMoving } from "./alertContext.js";
 
 const COUNTDOWN_SEC = Number(process.env.COUNTDOWN_SEC || 20);
 const FINAL_WINDOW_SEC = 5;
+/** Consecutive off polls before treating helmet as removed (~3s at 500ms). */
+const NOT_WORN_STREAK_THRESHOLD = 6;
 
 let active = null;
+
+/**
+ * Helmet worn for alerts: touch can open briefly when tilted.
+ * Require sustained "off" in the final window before NO_HELMET.
+ */
+export function deriveHelmetWorn(tracker) {
+  if (!tracker) return false;
+  if (!tracker.everWorn) return false;
+
+  const samples = tracker.final5sSamples || [];
+  if (samples.length >= 3 && tracker.everNotWorn) {
+    const wornInFinal = samples.filter((s) => s.worn).length;
+    if (wornInFinal === 0) return false;
+  }
+
+  return true;
+}
 
 export function startServerCountdown(cycle, snapshot) {
   active = {
@@ -17,7 +36,8 @@ export function startServerCountdown(cycle, snapshot) {
     cancelled: false,
     expiredHandled: false,
     everWorn: !!snapshot?.worn,
-    everNotWorn: !snapshot?.worn,
+    everNotWorn: false,
+    notWornStreak: snapshot?.worn ? 0 : 1,
     maxTilt: Number(snapshot?.tilt ?? snapshot?.angle ?? 0),
     final5sSamples: [],
     final5sHadMovement: false,
@@ -29,20 +49,29 @@ export function recordCountdownSample(data) {
   if (!active || active.cancelled || active.expiredHandled) return;
 
   const elapsed = (Date.now() - active.startedAt) / 1000;
+  const touchWorn =
+    data?.wornTouchRaw !== undefined ? !!data.wornTouchRaw : !!data?.worn;
   const worn = !!data?.worn;
   const tilt = Number(data?.tilt ?? data?.angle ?? 0);
   const moving = isMoving(data || {});
 
-  if (worn) active.everWorn = true;
-  else active.everNotWorn = true;
+  if (touchWorn) {
+    active.everWorn = true;
+    active.notWornStreak = 0;
+  } else if (active.everWorn) {
+    active.notWornStreak = (active.notWornStreak || 0) + 1;
+    if (active.notWornStreak >= NOT_WORN_STREAK_THRESHOLD) {
+      active.everNotWorn = true;
+    }
+  }
 
   active.maxTilt = Math.max(active.maxTilt ?? 0, tilt);
   active.snapshot = { ...active.snapshot, ...data };
 
   if (elapsed >= active.durationSec - FINAL_WINDOW_SEC) {
-    active.final5sSamples.push({ worn, tilt, moving, elapsed });
+    active.final5sSamples.push({ worn: touchWorn, tilt, moving, elapsed });
     if (moving) active.final5sHadMovement = true;
-    if (worn) active.final5sHadWorn = true;
+    if (touchWorn) active.final5sHadWorn = true;
   }
 }
 
@@ -101,8 +130,12 @@ export function overlayServerCountdown(data, transmitterOnline) {
   const remaining = remainingSec();
   const base = data || active.snapshot || {};
 
+  const inferredWorn = deriveHelmetWorn(active) || !!base.worn;
+
   return {
     ...base,
+    worn: inferredWorn,
+    wornTouchRaw: !!base.worn,
     serverCountdownActive: true,
     serverCountdown: remaining,
     countdown: remaining,
