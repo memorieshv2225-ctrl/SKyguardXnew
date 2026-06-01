@@ -1,6 +1,12 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const FRONTEND_DIST = path.join(__dirname, "../frontend/dist");
 import {
   sendEmergencyNotifications,
   sendTestWhatsAppAlert,
@@ -17,8 +23,12 @@ import {
 } from "./countdownTracker.js";
 
 const ESP32_URL = process.env.ESP32_URL || "http://10.138.165.36/data";
-const POLL_MS = 500;
+const POLL_MS = Number(process.env.POLL_MS || 500);
 const PORT = Number(process.env.PORT || 3001);
+/** Set SERVE_FRONTEND=1 (e.g. npm run start:app) to serve React build on same port for ngrok. */
+const SERVE_FRONTEND =
+  process.env.SERVE_FRONTEND === "1" &&
+  fs.existsSync(path.join(FRONTEND_DIST, "index.html"));
 
 const app = express();
 const FRONTEND_URL = process.env.FRONTEND_URL;
@@ -127,10 +137,6 @@ app.get("/api/status", (_req, res) => {
   });
 });
 
-app.get("/", (_req, res) => {
-  res.redirect("/api/status");
-});
-
 app.get("/api/live", (_req, res) => {
   res.json({
     connected: lastFetchOk,
@@ -166,9 +172,26 @@ app.post("/api/test-notify", async (_req, res) => {
   }
 });
 
+if (SERVE_FRONTEND) {
+  app.use(express.static(FRONTEND_DIST, { maxAge: 0 }));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(path.join(FRONTEND_DIST, "index.html"));
+  });
+} else {
+  app.get("/", (_req, res) => {
+    res.redirect("/api/status");
+  });
+}
+
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
   console.log(`Polling ${ESP32_URL} every ${POLL_MS}ms`);
+  if (SERVE_FRONTEND) {
+    console.log("Dashboard + API on one port (for ngrok)");
+    console.log(`  Local:  http://localhost:${PORT}`);
+    console.log(`  ngrok:  ngrok http ${PORT}`);
+  }
   console.log(
     "Notifications:",
     process.env.ALERT_PHONE ? "Twilio enabled" : "console only (set ALERT_PHONE)"

@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "build:app": "npm run build --prefix ../frontend",
+    "start:app": "npm run build:app && node scripts/start-app.mjs",
+    "ngrok": "node scripts/run-ngrok.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -89,26 +89,7 @@ float gpsSpeedKmh = 0, gpsAltM = 0;
 uint32_t gpsSats = 0;
 String gpsUtc = "";
 bool gpsFix = false;
-bool usingSimGps = false;
-bool locationValid = false;
 String gpsStatus = "NO_FIX";
-
-struct SimPoint { double lat; double lon; };
-const SimPoint SIM_ROUTE[] = {
-  {13.025958, 80.017478},
-  {13.025436, 80.015771},
-  {13.025792, 80.017051},
-  {13.025914, 80.017076},
-  {13.025875, 80.017096},
-  {13.025664, 80.016691},
-};
-#define SIM_ROUTE_LEN 6
-#define MOVE_VIB_THRESH       5.0f
-#define MOVE_G_DEV_THRESH     0.10f
-#define SIM_STEP_MS           2500
-
-int simWpIndex = 0;
-unsigned long lastSimAdvanceMs = 0;
 
 #define LOG_SIZE 30
 String eventLog[LOG_SIZE];
@@ -219,37 +200,6 @@ void readGPS() {
   updateGpsFields();
 }
 
-bool sensorsIndicateMoving() {
-  return vibration > MOVE_VIB_THRESH || fabsf(gForce - 1.0f) > MOVE_G_DEV_THRESH;
-}
-
-bool hasLocation() {
-  return gpsFix || usingSimGps;
-}
-
-void updateSimulatedLocation() {
-  if (gpsFix) {
-    usingSimGps = false;
-    locationValid = true;
-    return;
-  }
-  usingSimGps = true;
-  locationValid = true;
-  gpsLat = SIM_ROUTE[simWpIndex].lat;
-  gpsLon = SIM_ROUTE[simWpIndex].lon;
-  gpsStatus = sensorsIndicateMoving() ? "TRACKING" : "STATIONARY";
-  gpsSpeedKmh = sensorsIndicateMoving() ? 6.0f : 0.0f;
-  gpsAltM = 12.0f;
-  gpsSats = 8;
-  if (gpsUtc.length() == 0) {
-    gpsUtc = String(millis() / 1000) + "s";
-  }
-  if (sensorsIndicateMoving() && millis() - lastSimAdvanceMs >= SIM_STEP_MS) {
-    simWpIndex = (simWpIndex + 1) % SIM_ROUTE_LEN;
-    lastSimAdvanceMs = millis();
-  }
-}
-
 void updateBuzzer() {
   if (!buzzerOn) {
     digitalWrite(PIN_BUZZER, LOW);
@@ -315,7 +265,7 @@ void onCountdownExpired() {
   buzzerOn = false;
   digitalWrite(PIN_BUZZER, LOW);
 
-  if (hasLocation()) {
+  if (gpsFix) {
     finalizeAlertSent();
   } else {
     alertState = ALERT_GPS_REQUIRED;
@@ -402,7 +352,7 @@ void handleButton() {
 }
 
 void tryCompleteGpsPendingAlert() {
-  if (alertState == ALERT_GPS_REQUIRED && hasLocation()) {
+  if (alertState == ALERT_GPS_REQUIRED && gpsFix) {
     finalizeAlertSent();
   }
 }
@@ -473,9 +423,7 @@ void handleData() {
   json += "\"roll\":" + String(roll, 2) + ",";
   json += "\"angle\":" + String(tilt, 1) + ",";
   json += "\"tilt\":" + String(tilt, 1) + ",";
-  json += "\"gpsValid\":" + String(locationValid ? "true" : "false") + ",";
-  json += "\"locationSimulated\":" + String(usingSimGps ? "true" : "false") + ",";
-  json += "\"landmark\":\"Saveetha School of Management\",";
+  json += "\"gpsValid\":" + String(gpsFix ? "true" : "false") + ",";
   json += "\"gpsStatus\":\"" + gpsStatus + "\",";
   json += "\"lat\":" + String(gpsLat, 6) + ",";
   json += "\"lon\":" + String(gpsLon, 6) + ",";
@@ -529,35 +477,29 @@ void setup() {
   server.on("/", handleRoot);
   server.on("/data", handleData);
   server.begin();
-  gpsLat = SIM_ROUTE[0].lat;
-  gpsLon = SIM_ROUTE[0].lon;
-  usingSimGps = true;
-  locationValid = true;
-  gpsStatus = "STATIONARY";
-  addLog("Campus route location active");
-  addLog("Waiting for helmet to be worn…");
+  addLog("Waiting for helmet to be worn (TTP223 HIGH)…");
 }
 
 void loop() {
   server.handleClient();
   readGPS();
+  tryCompleteGpsPendingAlert();
 
   unsigned long now = millis();
-  updateSimulatedLocation();
-  tryCompleteGpsPendingAlert();
   bool touchHigh = (digitalRead(PIN_TTP223) == HIGH);
 
   if (touchHigh && !helmWorn) {
     helmWorn = true;
     armed = true;
     addLog("Helmet WORN — detection armed");
-  } else if (!touchHigh && helmWorn && currentMode != FAST) {
+  } else if (!touchHigh && helmWorn) {
     helmWorn = false;
     armed = false;
     confirmWaiting = false;
     addLog("Helmet NOT WORN — detection disabled");
-  } else if (!touchHigh && helmWorn && currentMode == FAST) {
-    addLog("Touch open during FAST (tilt) — still worn");
+    if (currentMode == FAST && alertState == ALERT_PENDING) {
+      addLog("Worn lost during FAST — countdown continues");
+    }
   }
 
   handleButton();
@@ -576,7 +518,6 @@ void loop() {
       computeAngles();
       pendingCaptureG = gForce;
       pendingCaptureAngle = tilt;
-      updateSimulatedLocation();
     }
     updateBuzzer();
     return;
@@ -587,7 +528,6 @@ void loop() {
     if (adxlRead()) {
       computeAngles();
       checkSpike();
-      updateSimulatedLocation();
     }
     updateBuzzer();
   }

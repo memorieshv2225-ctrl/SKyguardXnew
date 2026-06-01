@@ -5,8 +5,8 @@ import { DialGauge, VibrationSeismograph, useSmoothMotion } from "./MotionSensor
 
 const LIVE_URL = apiUrl("/api/live");
 const ALERTS_URL = apiUrl("/api/alerts");
-const LIVE_POLL_MS = 500;
-const ALERTS_POLL_MS = 3000;
+const LIVE_POLL_MS = 300;
+const ALERTS_POLL_MS = 2000;
 const MAP_REFRESH_MS = 10000;
 const G_THRESH = 1.2;
 const LANDMARK = "Saveetha School of Management";
