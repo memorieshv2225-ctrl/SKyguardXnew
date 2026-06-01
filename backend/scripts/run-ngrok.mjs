@@ -1,6 +1,7 @@
 /**
- * Build frontend, start unified server (port 5000), open ngrok tunnel in parallel.
- * Laptop must stay on same Wi-Fi as ESP. Restore prior setup: git checkout local-stable
+ * Build frontend, start unified server (port 5000), open ngrok tunnel.
+ * Laptop must stay on same Wi-Fi as ESP.
+ * Restore prior setup: git checkout local-stable
  */
 import { spawn } from "child_process";
 import path from "path";
@@ -18,8 +19,36 @@ function run(cmd, args, opts = {}) {
       shell: true,
       ...opts,
     });
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exit ${code}`))));
+    child.on("exit", (code) =>
+      code === 0 ? resolve() : reject(new Error(`${cmd} exit ${code}`))
+    );
     child.on("error", reject);
+  });
+}
+
+async function startNgrokTunnel() {
+  const opts = { addr: Number(PORT) };
+  if (process.env.NGROK_AUTHTOKEN) {
+    opts.authtoken = process.env.NGROK_AUTHTOKEN;
+  }
+
+  try {
+    const ngrok = (await import("ngrok")).default;
+    const url = await ngrok.connect(opts);
+    console.log("\n========================================");
+    console.log("Phone / remote URL:", url);
+    console.log("========================================\n");
+    return;
+  } catch (err) {
+    console.warn("ngrok npm:", err.message);
+  }
+
+  console.log(`Trying ngrok CLI: ngrok http ${PORT}\n`);
+  const ngrokProc = spawn("ngrok", ["http", PORT], { stdio: "inherit", shell: true });
+  ngrokProc.on("error", () => {
+    console.error("\nngrok failed. Add NGROK_AUTHTOKEN to backend/.env");
+    console.error("Get a free token: https://dashboard.ngrok.com/get-started/your-authtoken");
+    console.error("LAN dashboard: http://localhost:" + PORT);
   });
 }
 
@@ -41,27 +70,22 @@ const server = spawn("node", ["server.js"], {
   shell: true,
 });
 
-let ngrokProc = null;
-
-const shutdown = () => {
-  if (ngrokProc) ngrokProc.kill();
+const shutdown = async () => {
+  try {
+    const ngrok = (await import("ngrok")).default;
+    await ngrok.disconnect();
+    await ngrok.kill();
+  } catch {
+    /* ignore */
+  }
   server.kill();
   process.exit(0);
 };
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-setTimeout(() => {
-  console.log(`\nStarting ngrok http ${PORT} ...\n`);
-  ngrokProc = spawn("ngrok", ["http", PORT], { stdio: "inherit", shell: true });
-  ngrokProc.on("error", (err) => {
-    console.error("\nngrok not found. Install: https://ngrok.com/download");
-    console.error("Then run: ngrok http", PORT);
-    console.error("Dashboard (LAN): http://localhost:" + PORT);
-  });
-}, 2500);
+setTimeout(() => startNgrokTunnel(), 2500);
 
 server.on("exit", (code) => {
-  if (ngrokProc) ngrokProc.kill();
   process.exit(code ?? 0);
 });
