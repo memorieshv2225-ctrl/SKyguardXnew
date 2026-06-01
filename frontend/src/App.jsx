@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import { apiUrl } from "./api.js";
+import { DialGauge, VibrationSeismograph, useSmoothMotion } from "./MotionSensors.jsx";
 
 const LIVE_URL = apiUrl("/api/live");
 const ALERTS_URL = apiUrl("/api/alerts");
-const DATA_POLL_MS = 3000;
+const LIVE_POLL_MS = 500;
+const ALERTS_POLL_MS = 3000;
 const MAP_REFRESH_MS = 10000;
 const G_THRESH = 1.2;
 const LANDMARK = "Saveetha School of Management";
@@ -27,27 +29,6 @@ function Pill({ on, trueLabel, falseLabel, trueClass, falseClass }) {
   );
 }
 
-function Gauge({ label, value, max, unit, warn }) {
-  const pct = Math.min(100, ((value ?? 0) / max) * 100);
-  return (
-    <div className="gauge">
-      <div className="gauge-head">
-        <span>{label}</span>
-        <span className={warn ? "gauge-warn" : ""}>
-          {typeof value === "number" ? value.toFixed(2) : value}
-          {unit}
-        </span>
-      </div>
-      <div className="gauge-track">
-        <div
-          className={`gauge-fill ${warn ? "fill-warn" : ""}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const [payload, setPayload] = useState(null);
   const [alertsMeta, setAlertsMeta] = useState(null);
@@ -58,19 +39,14 @@ export default function App() {
   useEffect(() => {
     let active = true;
 
-    async function tick() {
+    async function pollLive() {
       try {
-        const [liveRes, alertRes] = await Promise.all([
-          fetch(LIVE_URL),
-          fetch(ALERTS_URL),
-        ]);
+        const liveRes = await fetch(LIVE_URL);
         if (!liveRes.ok) throw new Error(`Live HTTP ${liveRes.status}`);
         const live = await liveRes.json();
         if (!active) return;
         setPayload(live);
         setFetchError(null);
-        if (alertRes.ok) setAlertsMeta(await alertRes.json());
-
         const d = live.data;
         if (d?.lat != null && d?.lon != null) {
           displayCoords.current = { lat: d.lat, lon: d.lon };
@@ -80,11 +56,23 @@ export default function App() {
       }
     }
 
-    tick();
-    const id = setInterval(tick, DATA_POLL_MS);
+    async function pollAlerts() {
+      try {
+        const alertRes = await fetch(ALERTS_URL);
+        if (alertRes.ok && active) setAlertsMeta(await alertRes.json());
+      } catch {
+        /* alerts optional */
+      }
+    }
+
+    pollLive();
+    pollAlerts();
+    const liveId = setInterval(pollLive, LIVE_POLL_MS);
+    const alertId = setInterval(pollAlerts, ALERTS_POLL_MS);
     return () => {
       active = false;
-      clearInterval(id);
+      clearInterval(liveId);
+      clearInterval(alertId);
     };
   }, []);
 
@@ -103,6 +91,7 @@ export default function App() {
     ? new Date(payload.lastUpdate).toLocaleString()
     : "—";
   const d = payload?.data;
+  const motion = useSmoothMotion(d);
   const worn = d?.worn ?? false;
   const history =
     alertsMeta?.history?.length > 0
@@ -193,11 +182,27 @@ export default function App() {
               </div>
             </section>
 
-            <section className="card wide">
+            <section className="card wide motion-card">
               <div className="card-title"><span className="live-dot" />3. Motion Sensors</div>
-              <Gauge label="Impact (G-Force)" value={d.gforce} max={4} unit=" g" warn={d.gforce > G_THRESH} />
-              <Gauge label="Vibration" value={d.vibration ?? 0} max={50} unit="" warn={(d.vibration ?? 0) > 10} />
-              <Gauge label="Tilt" value={d.tilt ?? 0} max={90} unit="°" warn={(d.tilt ?? 0) > 45} />
+              <div className="dial-row">
+                <DialGauge
+                  label="Impact (G-Force)"
+                  value={motion.gforce}
+                  min={0}
+                  max={4}
+                  unit="g"
+                  warn={motion.gforce > G_THRESH}
+                />
+                <DialGauge
+                  label="Tilt"
+                  value={motion.tilt}
+                  min={0}
+                  max={90}
+                  unit="°"
+                  warn={motion.tilt > 45}
+                />
+              </div>
+              <VibrationSeismograph value={motion.vibration} />
               <div className="axis-grid">
                 <Axis label="Axis X" v={d.ax} />
                 <Axis label="Axis Y" v={d.ay} />

@@ -462,6 +462,121 @@ body {
   font-family: Consolas, monospace;
 }
 
+.motion-card {
+  grid-column: 1 / -1;
+}
+
+.dial-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 520px) {
+  .dial-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dial-gauge {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 10px 8px;
+  text-align: center;
+}
+
+.dial-gauge.dial-warn {
+  border-color: rgba(239, 68, 68, 0.45);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
+}
+
+.dial-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.dial-svg {
+  width: 100%;
+  max-width: 220px;
+  margin: 0 auto;
+  display: block;
+}
+
+.dial-arc-value {
+  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.4));
+  transition: stroke-dashoffset 0.05s linear;
+}
+
+.dial-svg line[stroke-width="2.5"] {
+  transform-origin: 100px 95px;
+  will-change: transform;
+}
+
+.dial-reading {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-family: "Courier New", monospace;
+  color: var(--accent);
+  line-height: 1.2;
+}
+
+.dial-unit {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-left: 2px;
+  opacity: 0.85;
+}
+
+.dial-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--muted);
+  padding: 0 12px;
+  margin-top: 2px;
+}
+
+.seismo-wrap {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px 12px;
+  margin-bottom: 14px;
+}
+
+.seismo-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.seismo-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.seismo-sub {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.seismo-canvas {
+  width: 100%;
+  height: 140px;
+  display: block;
+  border-radius: 6px;
+}
+
 .gauge {
   margin-bottom: 12px;
 }
