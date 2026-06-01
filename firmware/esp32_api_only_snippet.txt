@@ -1,0 +1,30 @@
+OPTIONAL — use your existing sketch; only change web routes if you want to drop the ESP dashboard.
+
+1. Delete the entire DASHBOARD_HTML[] PROGMEM block (~400 lines).
+
+2. In setup(), replace:
+     server.on("/",     []() {
+       server.send_P(200, "text/html", DASHBOARD_HTML);
+     });
+
+   with:
+     server.on("/", []() {
+       server.send(200, "text/plain",
+         "Helmet API. GET /data for JSON. Use Node backend + React dashboard.");
+     });
+
+3. Keep server.on("/data", handleData); unchanged.
+
+4. Upload sketch. Open Serial Monitor (115200). Note line:
+     WiFi connected → http://192.168.x.x
+
+5. Put that IP in backend (PowerShell example):
+     $env:ESP32_URL="http://192.168.x.x/data"
+     npm start
+
+WiFi on ESP must match your PC:
+  SSID: 12
+  PASS: 12345678
+
+Data path (no ESP code change required for this):
+  ESP32 GET /data  →  Node polls every 500ms  →  React GET /api/live
